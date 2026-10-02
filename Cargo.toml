@@ -1,0 +1,9 @@
+[package]
+name = "sway-foreground-booster-dmemcg"
+version = "0.1.0"
+edition = "2021"
+license = "BSD-3-Clause"
+
+[dependencies]
+serde_json = "1"
+signal-hook = "0.3"
