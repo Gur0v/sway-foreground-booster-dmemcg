@@ -327,6 +327,10 @@ struct Booster {
     previous: Option<(PathBuf, u64)>,
 }
 
+fn owned_scope_keeps_boost(result: io::Result<bool>) -> bool {
+    result.unwrap_or(true)
+}
+
 impl Booster {
     fn update(&mut self, tree: &Value) {
         let mut focused_game = None;
@@ -356,7 +360,11 @@ impl Booster {
                 } else if !matching_values(&group.join("dmem.low"), &self.capacity, true)
                     .unwrap_or(false)
                     || !focused_game.is_some_and(|(pid, app_id)| {
-                        owned_scope(group, &self.app, pid, app_id).unwrap_or(false)
+                        let owned = owned_scope(group, &self.app, pid, app_id);
+                        if let Err(error) = &owned {
+                            eprintln!("scope check: {error}");
+                        }
+                        owned_scope_keeps_boost(owned)
                     })
                 {
                     eprintln!("tracked scope changed; clearing owned regions");
@@ -422,7 +430,7 @@ fn sway_socket() -> io::Result<String> {
             return Ok(socket.clone());
         }
     }
-    let uid = unsafe { libc_uid() };
+    let uid = fs::metadata("/proc/self")?.uid();
     let directory = format!("/run/user/{uid}");
     let mut sockets = Vec::new();
     for entry in fs::read_dir(directory)? {
@@ -487,14 +495,21 @@ fn run(booster: &mut Booster, stop: &AtomicBool) -> io::Result<()> {
     Ok(())
 }
 
-fn main() -> io::Result<()> {
+fn main() {
+    if let Err(error) = try_main() {
+        eprintln!("{error}");
+        std::process::exit(1);
+    }
+}
+
+fn try_main() -> io::Result<()> {
     if env::args_os().nth(1).is_some() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             "usage: sway-foreground-booster-dmemcg",
         ));
     }
-    let uid = unsafe { libc_uid() };
+    let uid = fs::metadata("/proc/self")?.uid();
     let app = PathBuf::from(format!(
         "{ROOT}/user.slice/user-{uid}.slice/user@{uid}.service/app.slice"
     ));
@@ -505,7 +520,10 @@ fn main() -> io::Result<()> {
     {
         return Err(io::Error::new(
             io::ErrorKind::NotFound,
-            "dmem not enabled for app scopes",
+            format!(
+                "dmem not enabled for app scopes: {}",
+                app.join("cgroup.subtree_control").display()
+            ),
         ));
     }
     let mut booster = Booster {
@@ -532,14 +550,6 @@ fn main() -> io::Result<()> {
     } else {
         Err(io::Error::other("could not clear boosted scope"))
     }
-}
-
-unsafe extern "C" {
-    fn getuid() -> u32;
-}
-
-unsafe fn libc_uid() -> u32 {
-    getuid()
 }
 
 #[cfg(test)]
@@ -623,6 +633,13 @@ mod tests {
             writes,
             vec![("drm/a/vram".to_owned(), 0), ("drm/b/vram".to_owned(), 0)]
         );
+    }
+
+    #[test]
+    fn keeps_boost_on_scope_check_error() {
+        assert!(!owned_scope_keeps_boost(Ok(false)));
+        assert!(owned_scope_keeps_boost(Ok(true)));
+        assert!(owned_scope_keeps_boost(Err(io::Error::from(io::ErrorKind::NotFound))));
     }
 
     #[test]
