@@ -1,9 +1,35 @@
-# Sway dmem foreground booster
+# sway-foreground-booster-dmemcg
 
-Automatically boosts isolated Steam games' `dmem.low` while their Sway window is focused. BSD-3-Clause.
+Raises a Steam game's `dmem.low` while its Sway window is focused and clears it when focus leaves. BSD-3-Clause.
 
-Requires cgroup v2, Sway, and `dmem` enabled below the user manager's `app.slice`. Set each game's Steam launch options to `gamemoderun systemd-run --user --scope --slice=app.slice -- %command%`, then restart the game. Check `/proc/<game-pid>/cgroup`: the game and Steam reaper must share a new `run-p*.scope` beneath `user@UID.service/app.slice`, separate from Sway and Steam. The scope's `dmem.low` must be user-writable and initially zero. Shared `session-*.scope` is never eligible.
+## Requirements
 
-Run from Sway with `cargo run --offline`, or build with `cargo build --offline` and install the included user unit in `~/.config/systemd/user/`, then `systemctl --user daemon-reload && systemctl --user enable --now sway-foreground-booster-dmemcg.service`. Its `ExecStart` points to this checkout's debug binary; rebuild after source changes. Stop with `systemctl --user stop sway-foreground-booster-dmemcg.service` (or Ctrl+C for manual runs).
+- cgroup v2 with `dmem` exposed (`/sys/fs/cgroup/dmem.capacity` should list your GPU)
+- `dmem` enabled below the user manager's `app.slice`
+- Sway and systemd
+- Rust toolchain
 
-On focus loss the booster clears regions still matching its boost, leaving externally changed values alone. It rejects unrelated windows, preexisting nonzero limits, unverified scopes, and missing controllers. Sway IPC reconnects. After forced exit or failed cleanup, inspect the game's `dmem.low` before manually clearing stale values. Existing SteamOS dmemcg boosters protect broad ancestors; this program does not modify them or guarantee priority against equally protected siblings. `dmem` availability may change after user-manager restarts.
+## Install
+
+```
+cargo install --path .
+cp sway-foreground-booster-dmemcg.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now sway-foreground-booster-dmemcg.service
+```
+
+Stop it with `systemctl --user stop sway-foreground-booster-dmemcg.service`. Logs are in `journalctl --user -u sway-foreground-booster-dmemcg`.
+
+## Games
+
+Set each game's Steam launch options to:
+
+```
+gamemoderun systemd-run --user --scope --slice=app.slice -- %command%
+```
+
+Restart the game, then check `/proc/<game-pid>/cgroup`. The game and the Steam reaper should share their own `run-p*.scope` under `user@UID.service/app.slice`.
+
+## Notes
+
+Only scopes with a user-writable, all-zero `dmem.low` are touched, and on focus loss only values the booster set are cleared. It does not modify ancestor slices, so it won't win against equally protected siblings. If it dies mid-boost, check the game's `dmem.low` before clearing it by hand.
