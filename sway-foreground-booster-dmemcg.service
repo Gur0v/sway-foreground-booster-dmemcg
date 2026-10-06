@@ -1,7 +1,8 @@
 [Unit]
 Description=Sway foreground dmem booster
 BindsTo=sway-session.target
-After=sway-session.target
+Wants=dmemcg-booster-user.service
+After=sway-session.target dmemcg-booster-user.service
 
 [Service]
 Type=simple
