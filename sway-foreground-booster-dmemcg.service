@@ -5,7 +5,7 @@ After=sway-session.target
 
 [Service]
 Type=simple
-ExecStart=/home/gurov/Projects/sway-foreground-booster-dmemcg/target/debug/sway-foreground-booster-dmemcg
+ExecStart=<CHANGEME>/sway-foreground-booster-dmemcg
 Restart=on-abnormal
 RestartSec=2
 
