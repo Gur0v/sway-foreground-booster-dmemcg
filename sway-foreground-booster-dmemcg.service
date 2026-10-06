@@ -5,7 +5,7 @@ After=sway-session.target
 
 [Service]
 Type=simple
-ExecStart=<CHANGEME>/sway-foreground-booster-dmemcg
+ExecStart=%h/.cargo/bin/sway-foreground-booster-dmemcg
 Restart=on-abnormal
 RestartSec=2
 
